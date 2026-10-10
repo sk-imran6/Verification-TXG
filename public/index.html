@@ -1,0 +1,445 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090b10">
+  <title>TXG Verification</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #090b10;
+      --panel: #121722;
+      --border: #293142;
+      --text: #f5f6fb;
+      --muted: #9aa4b7;
+      --gold: #edc66f;
+      --green: #48d6a0;
+      --red: #ff6c7c;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 22px 12px;
+      background: radial-gradient(ellipse at top, #222138, transparent 60%), var(--bg);
+      color: var(--text);
+      font-family: system-ui, sans-serif;
+    }
+
+    main {
+      width: min(100%, 560px);
+      margin: auto;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      min-width: 0;
+    }
+
+    .logo {
+      display: grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      flex-shrink: 0;
+      border-radius: 14px;
+      border: 1px solid #826b37;
+      color: var(--gold);
+      background: linear-gradient(145deg, #352d1d, #15130f);
+      font-weight: 900;
+    }
+
+    .brand-title {
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 10px;
+      margin-top: 4px;
+      letter-spacing: 1px;
+    }
+
+    .pill {
+      padding: 7px 9px;
+      border-radius: 30px;
+      border: 1px solid #275642;
+      background: #10251e;
+      color: var(--green);
+      font-size: 10px;
+      white-space: nowrap;
+    }
+
+    .profile, .card {
+      border: 1px solid var(--border);
+      background: #111620;
+      border-radius: 19px;
+    }
+
+    .profile {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 15px;
+      margin-bottom: 15px;
+    }
+
+    .avatar {
+      width: 43px;
+      height: 43px;
+      flex-shrink: 0;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: #302a20;
+      color: var(--gold);
+      font-weight: 800;
+      font-size: 20px;
+    }
+
+    .profile-info { min-width: 0; }
+    .profile-name { font-size: 14px; font-weight: 750; overflow-wrap: anywhere; }
+    .profile-meta { margin-top: 4px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+    .profile-status { margin-left: auto; font-size: 10px; color: var(--muted); }
+
+    .card {
+      padding: 25px 19px;
+      text-align: center;
+      background: linear-gradient(155deg, #171d2a, #0f131b);
+    }
+
+    .symbol {
+      display: grid;
+      place-items: center;
+      width: 76px;
+      height: 76px;
+      margin: 0 auto 18px;
+      border: 1px solid #6e5930;
+      border-radius: 25px;
+      background: #2a2418;
+      color: var(--gold);
+      font-size: 34px;
+    }
+
+    h1 { margin: 0 0 11px; font-size: 26px; letter-spacing: -.7px; }
+    .description { color: var(--muted); font-size: 13px; line-height: 1.75; }
+
+    .progress { text-align: left; margin: 25px 0 20px; }
+    .progress-labels { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; margin-bottom: 9px; }
+    #progressText { color: var(--muted); }
+    #percent { color: var(--gold); font-weight: 800; }
+    .track { height: 7px; border-radius: 20px; background: #293142; overflow: hidden; }
+    #fill { height: 100%; width: 0; background: linear-gradient(90deg, #a77b2d, #f6d990); transition: width .3s; }
+
+    button {
+      width: 100%;
+      padding: 14px 16px;
+      border: 0;
+      border-radius: 13px;
+      background: linear-gradient(110deg, #f4d994, #d7aa4f);
+      color: #191309;
+      font-weight: 850;
+      cursor: pointer;
+    }
+
+    button:disabled { opacity: .6; cursor: wait; }
+
+    .notice {
+      display: none;
+      margin-top: 15px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      text-align: left;
+      font-size: 12px;
+      line-height: 1.65;
+      overflow-wrap: anywhere;
+    }
+
+    .notice.show { display: block; }
+    .notice.error { background: #281419; border-color: #71313b; color: #ffb0b8; }
+    .notice.success { background: #10251e; border-color: #275642; color: #9bf0ca; }
+
+    .success .symbol { color: var(--green); border-color: #275642; background: #10251e; }
+    .failure .symbol { color: var(--red); border-color: #71313b; background: #281419; }
+    .failure #fill { background: var(--red); }
+    .success #fill { background: var(--green); }
+
+    .maker {
+      display: block;
+      text-align: center;
+      margin: 22px 0 12px;
+      color: var(--gold);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    footer { text-align: center; color: #737e91; font-size: 10px; line-height: 1.7; }
+
+    @media (max-width: 370px) {
+      header { align-items: flex-start; }
+      .pill { font-size: 9px; }
+      h1 { font-size: 23px; }
+      .card { padding: 22px 14px; }
+    }
+  </style>
+</head>
+
+<body>
+<main>
+  <header>
+    <div class="brand">
+      <div class="logo">TXG</div>
+      <div>
+        <div class="brand-title" id="botTitle">TXG Verification</div>
+        <div class="subtitle">DEVICE VERIFICATION</div>
+      </div>
+    </div>
+    <div class="pill">● Secure Session</div>
+  </header>
+
+  <section class="profile">
+    <div class="avatar" id="avatar">?</div>
+    <div class="profile-info">
+      <div class="profile-name" id="name">Connecting...</div>
+      <div class="profile-meta" id="username">Telegram profile</div>
+      <div class="profile-meta" id="telegramId">Telegram ID: —</div>
+    </div>
+    <div class="profile-status" id="profileStatus">Pending</div>
+  </section>
+
+  <section class="card" id="card">
+    <div class="symbol" id="symbol">◇</div>
+    <h1 id="heading">Device Verification</h1>
+    <p class="description" id="description">
+      Checking your Telegram session before registration.
+    </p>
+
+    <div class="progress">
+      <div class="progress-labels">
+        <span id="progressText">Ready to start</span>
+        <span id="percent">0%</span>
+      </div>
+      <div class="track"><div id="fill"></div></div>
+    </div>
+
+    <button id="verifyButton">Start Verification</button>
+    <div id="notice" class="notice" role="status" aria-live="polite"></div>
+  </section>
+
+  <a class="maker" href="https://t.me/TXG_MAKER_bot"
+     target="_blank" rel="noopener noreferrer">♛ TXG MAKER</a>
+
+  <footer>
+    TXG Verification System · Mobile browsers only<br>
+    Opening this page requires a supported mobile device.
+  </footer>
+</main>
+
+<script>
+(() => {
+  "use strict";
+
+  const tg = window.Telegram?.WebApp;
+  const $ = id => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  const bot = params.get("bot") || "";
+
+  let running = false;
+
+  function progress(n, label) {
+    $("fill").style.width = n + "%";
+    $("percent").textContent = n + "%";
+    $("progressText").textContent = label;
+  }
+
+  function notice(message, type) {
+    $("notice").textContent = message;
+    $("notice").className = "notice show " + (type || "");
+  }
+
+  function result(type, symbol, title, desc, percent, label) {
+    $("card").classList.remove("success", "failure");
+    if (type === "success") $("card").classList.add("success");
+    if (type === "failure") $("card").classList.add("failure");
+
+    $("symbol").textContent = symbol;
+    $("heading").textContent = title;
+    $("description").textContent = desc;
+    progress(percent, label);
+  }
+
+  function showProfile(user) {
+    if (!user) return;
+    const fullName = [user.first_name, user.last_name]
+      .filter(Boolean).join(" ") || "Telegram User";
+
+    $("name").textContent = fullName;
+    $("username").textContent = user.username
+      ? "@" + user.username : "Telegram account";
+    $("telegramId").textContent = "Telegram ID: " + user.id;
+    $("avatar").textContent = fullName[0].toUpperCase();
+  }
+
+  function mobilePlatform() {
+    const ua = navigator.userAgent || "";
+
+    if (/Windows NT|Macintosh|X11|Linux x86_64|CrOS/i.test(ua)) {
+      return null;
+    }
+
+    if (/Android/i.test(ua)) return "android";
+    if (/iPhone|iPad|iPod/i.test(ua)) return "ios";
+    return null;
+  }
+
+  function deviceId() {
+    const key = "txg_browser_installation_v1";
+
+    try {
+      let id = localStorage.getItem(key);
+
+      if (!id || !/^[a-f0-9-]{36}$/i.test(id)) {
+        id = crypto.randomUUID();
+        localStorage.setItem(key, id);
+      }
+
+      return id;
+    } catch {
+      throw new Error("Browser storage unavailable. Enable site storage and retry.");
+    }
+  }
+
+  async function post(url, payload) {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      cache: "no-store",
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok || !data.ok) {
+      const e = new Error(data.error || "Verification request failed.");
+      e.status = response.status;
+      e.resultStatus = data.status;
+      throw e;
+    }
+
+    return data;
+  }
+
+  async function verify() {
+    if (running) return;
+    running = true;
+    $("verifyButton").disabled = true;
+    $("notice").className = "notice";
+
+    try {
+      const platform = mobilePlatform();
+
+      if (!platform) {
+        result("failure", "!", "Device Not Supported",
+          "TXG verification is available on supported Android and iPhone browsers only. Computers and unsupported devices are blocked.",
+          0, "Unsupported device");
+        notice("Open this page on an Android phone or iPhone.", "error");
+        return;
+      }
+
+      if (!tg?.initData) {
+        result("failure", "!", "Telegram Login Required",
+          "This browser does not have Telegram Mini App authentication data. The external-browser login flow must be implemented on the server before Chrome or Safari can verify automatically.",
+          0, "Authentication required");
+        notice("Open this page from the Telegram Mini App, or use the external-browser login flow when enabled.", "error");
+        return;
+      }
+
+      if (!/^[A-Za-z0-9_]{3,64}$/.test(bot)) {
+        throw new Error("Bot key is missing or invalid in the page URL.");
+      }
+
+      const id = deviceId();
+
+      result("", "◇", "Checking Telegram Session",
+        "Validating your Telegram authentication with the server.",
+        20, "Authentication");
+
+      const session = await post("/api/session", {
+        bot,
+        initData: tg.initData
+      });
+
+      showProfile({
+        id: session.user.id,
+        username: session.user.username,
+        first_name: session.user.firstName
+      });
+
+      progress(55, "Checking existing registration");
+
+      const verified = await post("/api/verify", {
+        bot,
+        initData: tg.initData,
+        deviceId: id
+      });
+
+      result("success", "✓", "Verification Successful",
+        "Your Telegram account has been verified for this bot.",
+        100, "Complete");
+
+      $("profileStatus").textContent = "Verified";
+      $("verifyButton").hidden = true;
+      notice(verified.message || "Verification successful.", "success");
+
+      if (tg.HapticFeedback?.notificationOccurred) {
+        tg.HapticFeedback.notificationOccurred("success");
+      }
+    } catch (e) {
+      result("failure", "!", "Verification Failed",
+        "Verification could not be completed. Check your connection and try again.",
+        0, "Failed");
+      notice(e.message, "error");
+      $("profileStatus").textContent = "Failed";
+    } finally {
+      running = false;
+      $("verifyButton").disabled = false;
+    }
+  }
+
+  function init() {
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      showProfile(tg.initDataUnsafe?.user);
+    }
+
+    $("botTitle").textContent = bot || "TXG Verification";
+    document.title = (bot || "TXG") + " | Verification";
+    $("verifyButton").addEventListener("click", verify);
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

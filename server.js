@@ -2,6 +2,7 @@
 const express = require("express");
 const crypto = require("crypto");
 const path = require("path");
+const net = require("net");
 const { neon } = require("@neondatabase/serverless");
 
 const app = express();
@@ -44,9 +45,7 @@ function randomId() {
 
 function reply(res, code, status, title, message, extra = {}) {
   res.set("Cache-Control", "no-store");
-  return res.status(code).json({
-    status, title, message, ...extra
-  });
+  return res.status(code).json({ status, title, message, ...extra });
 }
 
 function encrypt(text) {
@@ -65,7 +64,10 @@ function encrypt(text) {
 }
 
 function decrypt(value) {
-  const [iv, tag, data] = value.split(".");
+  const parts = value.split(".");
+  if (parts.length !== 3) throw new Error("Invalid encrypted token");
+
+  const [iv, tag, data] = parts;
   const decipher = crypto.createDecipheriv(
     "aes-256-gcm",
     encKey,
@@ -88,10 +90,7 @@ function requireTbc(req, res, next) {
     supplied.length !== expected.length ||
     !crypto.timingSafeEqual(supplied, expected)
   ) {
-    return reply(
-      res, 401, "error", "Unauthorized",
-      "TBC authentication failed."
-    );
+    return reply(res, 401, "error", "Unauthorized", "TBC authentication failed.");
   }
 
   next();
@@ -111,15 +110,19 @@ function telegramInitDataValid(initData, token) {
     const params = new URLSearchParams(initData);
     const receivedHash = params.get("hash");
 
-    if (!receivedHash) return null;
+    if (!receivedHash || !/^[a-f0-9]{64}$/i.test(receivedHash)) {
+      return null;
+    }
 
     params.delete("hash");
 
     const authDate = Number(params.get("auth_date"));
+    const now = Date.now() / 1000;
 
     if (
       !Number.isFinite(authDate) ||
-      Math.abs(Date.now() / 1000 - authDate) > 300
+      authDate > now + 30 ||
+      now - authDate > 300
     ) {
       return null;
     }
@@ -139,13 +142,10 @@ function telegramInitDataValid(initData, token) {
       .update(checkString)
       .digest("hex");
 
-    const actualBuffer = Buffer.from(receivedHash, "hex");
-    const expectedBuffer = Buffer.from(expected, "hex");
+    const a = Buffer.from(receivedHash, "hex");
+    const b = Buffer.from(expected, "hex");
 
-    if (
-      actualBuffer.length !== expectedBuffer.length ||
-      !crypto.timingSafeEqual(actualBuffer, expectedBuffer)
-    ) {
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
       return null;
     }
 
@@ -159,23 +159,88 @@ function telegramInitDataValid(initData, token) {
 }
 
 /* --------------------------------
-   IP CHECKING: IP-DB + ipapi.is
+   TBC WEBHOOK CALLBACK
+--------------------------------- */
+
+// Configure this to the exact trusted TBC webhook hostname
+// once you confirm the hostname returned by libs.Webhook.getUrlFor().
+function validateTbcWebhook(value) {
+  try {
+    if (typeof value !== "string" || value.length > 2000) return false;
+
+    const url = new URL(value);
+
+    if (
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      !url.hostname ||
+      net.isIP(url.hostname) ||
+      url.hostname === "localhost" ||
+      url.hostname.endsWith(".localhost") ||
+      url.hostname.endsWith(".local")
+    ) {
+      return false;
+    }
+
+    // Optional strict allowlist:
+    // Set TBC_WEBHOOK_HOST to the exact trusted hostname in Render.
+    const allowedHost = process.env.TBC_WEBHOOK_HOST;
+
+    if (allowedHost && url.hostname.toLowerCase() !== allowedHost.toLowerCase()) {
+      return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function sendTbcCallback(webhookUrl, payload) {
+  if (!validateTbcWebhook(webhookUrl)) {
+    console.error("TBC callback skipped: invalid/untrusted webhook URL");
+    return false;
+  }
+
+  try {
+    const response = await fetch(webhookUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(7000),
+      redirect: "error"
+    });
+
+    if (!response.ok) {
+      console.error("TBC callback HTTP status:", response.status);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("TBC callback failed:", error.message);
+    return false;
+  }
+}
+
+/* --------------------------------
+   IP CHECKING
 --------------------------------- */
 
 function getClientIp(req) {
   let ip = req.ip || "";
 
-  if (ip.startsWith("::ffff:")) {
-    ip = ip.slice(7);
-  }
+  if (ip.startsWith("::ffff:")) ip = ip.slice(7);
 
   return ip;
 }
 
 function extractIpDbFlags(data) {
-  const networkType = String(
-    data?.networkType || ""
-  ).toLowerCase();
+  const networkType = String(data?.networkType || "").toLowerCase();
 
   const sources = Array.isArray(data?.blacklistSources)
     ? data.blacklistSources.join(" ").toLowerCase()
@@ -188,45 +253,28 @@ function extractIpDbFlags(data) {
   const combined = `${sources} ${dnsbl}`;
 
   return {
-    vpn: networkType === "vpn" ||
-         /\bvpn\b/.test(combined),
-
-    proxy: networkType === "proxy" ||
-           /\bproxy\b/.test(combined),
-
-    tor: networkType === "tor" ||
-         /tor exit|tor node/.test(combined)
+    vpn: networkType === "vpn" || /\bvpn\b/.test(combined),
+    proxy: networkType === "proxy" || /\bproxy\b/.test(combined),
+    tor: networkType === "tor" || /tor exit|tor node/.test(combined)
   };
 }
 
 async function queryIpDb(ip) {
-  if (!IPDB_KEY) {
-    throw new Error("IPDB_KEY is not configured");
-  }
+  if (!IPDB_KEY) throw new Error("IPDB_KEY is not configured");
 
   const response = await fetch(
-    "https://ip-db.com/api/v1/check/" +
-      encodeURIComponent(ip),
+    "https://ip-db.com/api/v1/check/" + encodeURIComponent(ip),
     {
-      headers: {
-        Key: IPDB_KEY,
-        Accept: "application/json"
-      },
+      headers: { Key: IPDB_KEY, Accept: "application/json" },
       signal: AbortSignal.timeout(5000)
     }
   );
 
-  if (!response.ok) {
-    throw new Error(`IP-DB HTTP ${response.status}`);
-  }
+  if (!response.ok) throw new Error(`IP-DB HTTP ${response.status}`);
 
   const data = await response.json();
 
-  if (
-    data.error ||
-    data.errorCode ||
-    data.isPrivate === true
-  ) {
+  if (data.error || data.errorCode || data.isPrivate === true) {
     throw new Error("IP-DB returned an invalid result");
   }
 
@@ -234,9 +282,7 @@ async function queryIpDb(ip) {
 }
 
 async function queryIpApi(ip) {
-  if (!IPAPI_KEY) {
-    throw new Error("IPAPI_KEY is not configured");
-  }
+  if (!IPAPI_KEY) throw new Error("IPAPI_KEY is not configured");
 
   const response = await fetch("https://api.ipapi.is", {
     method: "POST",
@@ -244,16 +290,11 @@ async function queryIpApi(ip) {
       "Content-Type": "application/json",
       Accept: "application/json"
     },
-    body: JSON.stringify({
-      q: ip,
-      key: IPAPI_KEY
-    }),
+    body: JSON.stringify({ q: ip, key: IPAPI_KEY }),
     signal: AbortSignal.timeout(5000)
   });
 
-  if (!response.ok) {
-    throw new Error(`ipapi.is HTTP ${response.status}`);
-  }
+  if (!response.ok) throw new Error(`ipapi.is HTTP ${response.status}`);
 
   const data = await response.json();
 
@@ -261,7 +302,6 @@ async function queryIpApi(ip) {
     throw new Error("ipapi.is returned an API error");
   }
 
-  // Detection fields require an API key.
   if (
     typeof data.is_vpn !== "boolean" &&
     typeof data.is_proxy !== "boolean" &&
@@ -280,7 +320,6 @@ async function queryIpApi(ip) {
 async function checkIpRisk(ip) {
   const ipHash = sha(ip);
 
-  // Reuse cached results for 24 hours.
   const cached = await sql`
     SELECT is_vpn, is_proxy, is_tor
     FROM ip_risk_cache
@@ -301,17 +340,15 @@ async function checkIpRisk(ip) {
 
   let flags;
 
-  // First provider: IP-DB.
   try {
     flags = await queryIpDb(ip);
   } catch (error) {
-    console.warn("IP-DB check failed:", error.message);
+    console.warn("IP-DB failed:", error.message);
 
-    // Second provider: ipapi.is.
     try {
       flags = await queryIpApi(ip);
     } catch (fallbackError) {
-      console.warn("ipapi.is check failed:", fallbackError.message);
+      console.warn("ipapi.is failed:", fallbackError.message);
 
       return {
         ok: false,
@@ -325,16 +362,11 @@ async function checkIpRisk(ip) {
 
   await sql`
     INSERT INTO ip_risk_cache (
-      ip_hash, is_vpn, is_proxy, is_tor,
-      checked_at, expires_at
+      ip_hash, is_vpn, is_proxy, is_tor, checked_at, expires_at
     )
     VALUES (
-      ${ipHash},
-      ${flags.vpn},
-      ${flags.proxy},
-      ${flags.tor},
-      NOW(),
-      NOW() + INTERVAL '24 hours'
+      ${ipHash}, ${flags.vpn}, ${flags.proxy}, ${flags.tor},
+      NOW(), NOW() + INTERVAL '24 hours'
     )
     ON CONFLICT (ip_hash)
     DO UPDATE SET
@@ -349,32 +381,39 @@ async function checkIpRisk(ip) {
 }
 
 /* --------------------------------
-   HEALTH CHECK
+   HEALTH
 --------------------------------- */
 
 app.get("/health", (req, res) => {
-  return res.json({
-    status: "success",
-    message: "TXG backend running"
-  });
+  return reply(res, 200, "success", "Online", "TXG backend running");
 });
 
 /* --------------------------------
-   REGISTER BOT
+   REGISTER BOT + USER CALLBACK
 --------------------------------- */
 
 app.post("/api/register", requireTbc, async (req, res) => {
   try {
     const token = req.body?.bot_token;
+    const webhookUrl = req.body?.webhook_url;
+    const tbcUserId = String(req.body?.tbc_user_id ?? "");
 
     if (
       typeof token !== "string" ||
       !/^\d{5,20}:[A-Za-z0-9_-]{20,}$/.test(token)
     ) {
+      return reply(res, 400, "error", "Invalid token", "Provide a valid bot token.");
+    }
+
+    if (!validateTbcWebhook(webhookUrl)) {
       return reply(
-        res, 400, "error", "Invalid token",
-        "Provide a valid bot token."
+        res, 400, "error", "Invalid webhook",
+        "A trusted HTTPS TBC webhook URL is required."
       );
+    }
+
+    if (!/^\d{1,20}$/.test(tbcUserId)) {
+      return reply(res, 400, "error", "Invalid user", "Valid TBC user ID required.");
     }
 
     const tgResponse = await fetch(
@@ -394,14 +433,8 @@ app.post("/api/register", requireTbc, async (req, res) => {
     const botKey = sha(token);
 
     await sql`
-      INSERT INTO registered_bots (
-        bot_key, bot_username, bot_token_enc
-      )
-      VALUES (
-        ${botKey},
-        ${tg.result.username},
-        ${encrypt(token)}
-      )
+      INSERT INTO registered_bots (bot_key, bot_username, bot_token_enc)
+      VALUES (${botKey}, ${tg.result.username}, ${encrypt(token)})
       ON CONFLICT (bot_key)
       DO UPDATE SET
         bot_username = EXCLUDED.bot_username,
@@ -409,35 +442,31 @@ app.post("/api/register", requireTbc, async (req, res) => {
     `;
 
     const id = randomId();
-    const expiresAt = new Date(
-      Date.now() + 5 * 60 * 1000
-    ).toISOString();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
     await sql`
       INSERT INTO temporary_registration_ids (
-        id_hash, bot_key, expires_at
+        id_hash, bot_key, expires_at, webhook_url, tbc_user_id
       )
-      VALUES (${sha(id)}, ${botKey}, ${expiresAt})
+      VALUES (
+        ${sha(id)}, ${botKey}, ${expiresAt}, ${webhookUrl}, ${tbcUserId}
+      )
     `;
 
     return reply(
       res, 201, "success", "Bot registered",
-      "Temporary ID expires in 5 minutes.",
+      "Temporary registration expires in 5 minutes.",
       {
         registration_id: id,
         expires_at: expiresAt,
         bot_username: tg.result.username,
-        webapp_url:
-          `${ORIGIN}/?registration_id=${encodeURIComponent(id)}`
+        webapp_url: `${ORIGIN}/?registration_id=${encodeURIComponent(id)}`
       }
     );
   } catch (error) {
     console.error("register:", error.message);
 
-    return reply(
-      res, 500, "error", "Server error",
-      "Could not register bot."
-    );
+    return reply(res, 500, "error", "Server error", "Could not register bot.");
   }
 });
 
@@ -449,15 +478,8 @@ app.post("/api/registration-info", async (req, res) => {
   try {
     const id = req.body?.registration_id;
 
-    if (
-      typeof id !== "string" ||
-      id.length < 30 ||
-      id.length > 100
-    ) {
-      return reply(
-        res, 400, "error", "Invalid ID",
-        "Registration ID is invalid."
-      );
+    if (typeof id !== "string" || id.length < 30 || id.length > 100) {
+      return reply(res, 400, "error", "Invalid ID", "Registration ID is invalid.");
     }
 
     const rows = await sql`
@@ -484,10 +506,7 @@ app.post("/api/registration-info", async (req, res) => {
     `;
 
     if (!bots.length) {
-      return reply(
-        res, 404, "error", "Bot not found",
-        "Registered bot no longer exists."
-      );
+      return reply(res, 404, "error", "Bot not found", "Registered bot not found.");
     }
 
     return reply(
@@ -498,10 +517,7 @@ app.post("/api/registration-info", async (req, res) => {
   } catch (error) {
     console.error("registration-info:", error.message);
 
-    return reply(
-      res, 500, "error", "Server error",
-      "Could not load registration."
-    );
+    return reply(res, 500, "error", "Server error", "Could not load registration.");
   }
 });
 
@@ -516,15 +532,14 @@ app.post("/api/verify", async (req, res) => {
     const deviceId = req.body?.device_id;
 
     if (
-      typeof id !== "string" ||
-      typeof initData !== "string" ||
+      typeof id !== "string" || id.length < 30 || id.length > 100 ||
+      typeof initData !== "string" || initData.length > 10000 ||
       typeof deviceId !== "string" ||
-      deviceId.length < 16 ||
-      deviceId.length > 200
+      deviceId.length < 16 || deviceId.length > 200
     ) {
       return reply(
         res, 400, "error", "Missing data",
-        "Open this page from the Telegram Mini App with valid data."
+        "Open the official Telegram Mini App with valid data."
       );
     }
 
@@ -539,11 +554,8 @@ app.post("/api/verify", async (req, res) => {
 
     const ip = getClientIp(req);
 
-    if (!ip) {
-      return reply(
-        res, 400, "error", "IP unavailable",
-        "Could not determine connection IP."
-      );
+    if (!ip || net.isIP(ip) === 0) {
+      return reply(res, 400, "error", "IP unavailable", "Could not determine connection IP.");
     }
 
     const risk = await checkIpRisk(ip);
@@ -563,7 +575,7 @@ app.post("/api/verify", async (req, res) => {
     }
 
     const ids = await sql`
-      SELECT bot_key
+      SELECT bot_key, webhook_url, tbc_user_id
       FROM temporary_registration_ids
       WHERE id_hash = ${sha(id)}
         AND used_at IS NULL
@@ -578,7 +590,8 @@ app.post("/api/verify", async (req, res) => {
       );
     }
 
-    const botKey = ids[0].bot_key;
+    const registration = ids[0];
+    const botKey = registration.bot_key;
 
     const botRows = await sql`
       SELECT bot_username, bot_token_enc
@@ -588,23 +601,15 @@ app.post("/api/verify", async (req, res) => {
     `;
 
     if (!botRows.length) {
-      return reply(
-        res, 404, "error", "Bot not found",
-        "Please register this bot again."
-      );
+      return reply(res, 404, "error", "Bot not found", "Please register this bot again.");
     }
 
     const bot = botRows[0];
-    const user = telegramInitDataValid(
-      initData,
-      decrypt(bot.bot_token_enc)
-    );
+    const user = telegramInitDataValid(initData, decrypt(bot.bot_token_enc));
 
     if (!user || !user.id) {
       await sql`
-        INSERT INTO verification_events (
-          bot_key, event_type, details
-        )
+        INSERT INTO verification_events (bot_key, event_type, details)
         VALUES (
           ${botKey},
           'rejected_invalid_telegram_auth',
@@ -619,6 +624,25 @@ app.post("/api/verify", async (req, res) => {
     }
 
     const telegramId = String(user.id);
+
+    if (telegramId !== String(registration.tbc_user_id)) {
+      await sql`
+        INSERT INTO verification_events (
+          bot_key, telegram_user_id, event_type, details
+        )
+        VALUES (
+          ${botKey}, ${telegramId}, 'rejected_tbc_user_mismatch',
+          ${JSON.stringify({ platform })}::jsonb
+        )
+      `;
+
+      return reply(
+        res, 403, "error", "Wrong Telegram account",
+        "Open the verification link from the account that requested it."
+      );
+    }
+
+    const webhookUrl = registration.webhook_url;
     const deviceHash = sha(`${botKey}:${deviceId}`);
 
     const existingUser = await sql`
@@ -631,6 +655,18 @@ app.post("/api/verify", async (req, res) => {
 
     if (existingUser.length) {
       if (existingUser[0].device_hash === deviceHash) {
+        await sql`
+          UPDATE temporary_registration_ids
+          SET used_at = NOW()
+          WHERE id_hash = ${sha(id)} AND used_at IS NULL
+        `;
+
+        await sendTbcCallback(webhookUrl, {
+          status: "info",
+          title: "Already Verified",
+          message: "This Telegram account and device are already verified."
+        });
+
         return reply(
           res, 200, "info", "Already Verified",
           "Already verified by this device on this account."
@@ -657,40 +693,34 @@ app.post("/api/verify", async (req, res) => {
           bot_key, telegram_user_id, event_type, details
         )
         VALUES (
-          ${botKey},
-          ${telegramId},
-          'rejected_device_in_use',
+          ${botKey}, ${telegramId}, 'rejected_device_in_use',
           ${JSON.stringify({ platform })}::jsonb
         )
       `;
 
       return reply(
         res, 409, "error", "Device already registered",
-        "This browser installation is already registered to another Telegram account for this bot."
+        "This device is already registered to another Telegram account for this bot."
       );
     }
 
+    // Unique database constraints remain the final duplicate safeguard.
     await sql`
       INSERT INTO device_registrations (
         bot_key, telegram_user_id, device_hash,
         platform, username, first_name, status
       )
       VALUES (
-        ${botKey},
-        ${telegramId},
-        ${deviceHash},
-        ${platform},
-        ${user.username || null},
-        ${user.first_name || null},
-        'verified'
+        ${botKey}, ${telegramId}, ${deviceHash},
+        ${platform}, ${user.username || null},
+        ${user.first_name || null}, 'verified'
       )
     `;
 
     await sql`
       UPDATE temporary_registration_ids
       SET used_at = NOW()
-      WHERE id_hash = ${sha(id)}
-        AND used_at IS NULL
+      WHERE id_hash = ${sha(id)} AND used_at IS NULL
     `;
 
     await sql`
@@ -698,23 +728,25 @@ app.post("/api/verify", async (req, res) => {
         bot_key, telegram_user_id, event_type, details
       )
       VALUES (
-        ${botKey},
-        ${telegramId},
-        'verified',
-        ${JSON.stringify({
-          platform,
-          risk_source: risk.source
-        })}::jsonb
+        ${botKey}, ${telegramId}, 'verified',
+        ${JSON.stringify({ platform, risk_source: risk.source })}::jsonb
       )
     `;
+
+    // Callback is best-effort; the database verification is already saved.
+    await sendTbcCallback(webhookUrl, {
+      status: "success",
+      title: "Device Verified",
+      message: "Your Telegram account has been verified successfully.",
+      telegram_user_id: telegramId,
+      username: user.username || "",
+      first_name: user.first_name || ""
+    });
 
     return reply(
       res, 200, "success", "Verification successful",
       "Your Telegram account has been verified for this bot.",
-      {
-        verified: true,
-        bot_username: bot.bot_username
-      }
+      { verified: true, bot_username: bot.bot_username }
     );
   } catch (error) {
     if (error.code === "23505") {
@@ -743,10 +775,7 @@ app.use(express.static(
 ));
 
 app.use((req, res) => {
-  return reply(
-    res, 404, "error", "Not found",
-    "Endpoint not found."
-  );
+  return reply(res, 404, "error", "Not found", "Endpoint not found.");
 });
 
 const port = Number(process.env.PORT || 3000);

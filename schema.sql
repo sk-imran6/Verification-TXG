@@ -1,49 +1,20 @@
 
-CREATE TABLE IF NOT EXISTS device_registrations (
+-- External browser Telegram login requests
+CREATE TABLE IF NOT EXISTS telegram_login_requests (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-
-    bot_key TEXT NOT NULL,
-    telegram_user_id TEXT NOT NULL,
-
-    -- Hash of the browser installation identifier.
-    device_hash TEXT NOT NULL,
-
-    -- Optional platform attestation identifier, when supported.
-    device_key_hash TEXT,
-
-    platform TEXT NOT NULL
-        CHECK (platform IN ('android', 'ios')),
-
-    username TEXT,
-    first_name TEXT,
-
-    verified BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-    CONSTRAINT unique_bot_telegram_user
-        UNIQUE (bot_key, telegram_user_id),
-
-    CONSTRAINT unique_bot_device
-        UNIQUE (bot_key, device_hash)
-);
-
-CREATE INDEX IF NOT EXISTS idx_registrations_bot
-    ON device_registrations (bot_key);
-
-CREATE INDEX IF NOT EXISTS idx_registrations_user
-    ON device_registrations (telegram_user_id);
-
-CREATE TABLE IF NOT EXISTS verification_events (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-
+    token_hash TEXT NOT NULL UNIQUE,
     bot_key TEXT NOT NULL,
     telegram_user_id TEXT,
-    event_type TEXT NOT NULL,
-    details JSONB NOT NULL DEFAULT '{}'::JSONB,
-
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'approved', 'used', 'expired')),
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    approved_at TIMESTAMPTZ,
+    used_at TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS idx_events_bot_created
-    ON verification_events (bot_key, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tg_login_bot_status
+    ON telegram_login_requests (bot_key, status);
+
+CREATE INDEX IF NOT EXISTS idx_tg_login_expiry
+    ON telegram_login_requests (expires_at);

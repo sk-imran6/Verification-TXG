@@ -1,445 +1,70 @@
-
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#090b10">
-  <title>TXG Verification</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-
-  <style>
-    :root {
-      color-scheme: dark;
-      --bg: #090b10;
-      --panel: #121722;
-      --border: #293142;
-      --text: #f5f6fb;
-      --muted: #9aa4b7;
-      --gold: #edc66f;
-      --green: #48d6a0;
-      --red: #ff6c7c;
-    }
-
-    * { box-sizing: border-box; }
-
-    body {
-      margin: 0;
-      min-height: 100vh;
-      padding: 22px 12px;
-      background: radial-gradient(ellipse at top, #222138, transparent 60%), var(--bg);
-      color: var(--text);
-      font-family: system-ui, sans-serif;
-    }
-
-    main {
-      width: min(100%, 560px);
-      margin: auto;
-    }
-
-    header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 22px;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 11px;
-      min-width: 0;
-    }
-
-    .logo {
-      display: grid;
-      place-items: center;
-      width: 44px;
-      height: 44px;
-      flex-shrink: 0;
-      border-radius: 14px;
-      border: 1px solid #826b37;
-      color: var(--gold);
-      background: linear-gradient(145deg, #352d1d, #15130f);
-      font-weight: 900;
-    }
-
-    .brand-title {
-      font-weight: 800;
-      overflow-wrap: anywhere;
-    }
-
-    .subtitle {
-      color: var(--muted);
-      font-size: 10px;
-      margin-top: 4px;
-      letter-spacing: 1px;
-    }
-
-    .pill {
-      padding: 7px 9px;
-      border-radius: 30px;
-      border: 1px solid #275642;
-      background: #10251e;
-      color: var(--green);
-      font-size: 10px;
-      white-space: nowrap;
-    }
-
-    .profile, .card {
-      border: 1px solid var(--border);
-      background: #111620;
-      border-radius: 19px;
-    }
-
-    .profile {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 15px;
-      margin-bottom: 15px;
-    }
-
-    .avatar {
-      width: 43px;
-      height: 43px;
-      flex-shrink: 0;
-      display: grid;
-      place-items: center;
-      border-radius: 50%;
-      background: #302a20;
-      color: var(--gold);
-      font-weight: 800;
-      font-size: 20px;
-    }
-
-    .profile-info { min-width: 0; }
-    .profile-name { font-size: 14px; font-weight: 750; overflow-wrap: anywhere; }
-    .profile-meta { margin-top: 4px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
-    .profile-status { margin-left: auto; font-size: 10px; color: var(--muted); }
-
-    .card {
-      padding: 25px 19px;
-      text-align: center;
-      background: linear-gradient(155deg, #171d2a, #0f131b);
-    }
-
-    .symbol {
-      display: grid;
-      place-items: center;
-      width: 76px;
-      height: 76px;
-      margin: 0 auto 18px;
-      border: 1px solid #6e5930;
-      border-radius: 25px;
-      background: #2a2418;
-      color: var(--gold);
-      font-size: 34px;
-    }
-
-    h1 { margin: 0 0 11px; font-size: 26px; letter-spacing: -.7px; }
-    .description { color: var(--muted); font-size: 13px; line-height: 1.75; }
-
-    .progress { text-align: left; margin: 25px 0 20px; }
-    .progress-labels { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; margin-bottom: 9px; }
-    #progressText { color: var(--muted); }
-    #percent { color: var(--gold); font-weight: 800; }
-    .track { height: 7px; border-radius: 20px; background: #293142; overflow: hidden; }
-    #fill { height: 100%; width: 0; background: linear-gradient(90deg, #a77b2d, #f6d990); transition: width .3s; }
-
-    button {
-      width: 100%;
-      padding: 14px 16px;
-      border: 0;
-      border-radius: 13px;
-      background: linear-gradient(110deg, #f4d994, #d7aa4f);
-      color: #191309;
-      font-weight: 850;
-      cursor: pointer;
-    }
-
-    button:disabled { opacity: .6; cursor: wait; }
-
-    .notice {
-      display: none;
-      margin-top: 15px;
-      padding: 12px;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      text-align: left;
-      font-size: 12px;
-      line-height: 1.65;
-      overflow-wrap: anywhere;
-    }
-
-    .notice.show { display: block; }
-    .notice.error { background: #281419; border-color: #71313b; color: #ffb0b8; }
-    .notice.success { background: #10251e; border-color: #275642; color: #9bf0ca; }
-
-    .success .symbol { color: var(--green); border-color: #275642; background: #10251e; }
-    .failure .symbol { color: var(--red); border-color: #71313b; background: #281419; }
-    .failure #fill { background: var(--red); }
-    .success #fill { background: var(--green); }
-
-    .maker {
-      display: block;
-      text-align: center;
-      margin: 22px 0 12px;
-      color: var(--gold);
-      text-decoration: none;
-      font-size: 13px;
-      font-weight: 850;
-    }
-
-    footer { text-align: center; color: #737e91; font-size: 10px; line-height: 1.7; }
-
-    @media (max-width: 370px) {
-      header { align-items: flex-start; }
-      .pill { font-size: 9px; }
-      h1 { font-size: 23px; }
-      .card { padding: 22px 14px; }
-    }
-  </style>
-</head>
-
-<body>
-<main>
-  <header>
-    <div class="brand">
-      <div class="logo">TXG</div>
-      <div>
-        <div class="brand-title" id="botTitle">TXG Verification</div>
-        <div class="subtitle">DEVICE VERIFICATION</div>
-      </div>
-    </div>
-    <div class="pill">● Secure Session</div>
-  </header>
-
-  <section class="profile">
-    <div class="avatar" id="avatar">?</div>
-    <div class="profile-info">
-      <div class="profile-name" id="name">Connecting...</div>
-      <div class="profile-meta" id="username">Telegram profile</div>
-      <div class="profile-meta" id="telegramId">Telegram ID: —</div>
-    </div>
-    <div class="profile-status" id="profileStatus">Pending</div>
-  </section>
-
-  <section class="card" id="card">
-    <div class="symbol" id="symbol">◇</div>
-    <h1 id="heading">Device Verification</h1>
-    <p class="description" id="description">
-      Checking your Telegram session before registration.
-    </p>
-
-    <div class="progress">
-      <div class="progress-labels">
-        <span id="progressText">Ready to start</span>
-        <span id="percent">0%</span>
-      </div>
-      <div class="track"><div id="fill"></div></div>
-    </div>
-
-    <button id="verifyButton">Start Verification</button>
-    <div id="notice" class="notice" role="status" aria-live="polite"></div>
-  </section>
-
-  <a class="maker" href="https://t.me/TXG_MAKER_bot"
-     target="_blank" rel="noopener noreferrer">♛ TXG MAKER</a>
-
-  <footer>
-    TXG Verification System · Mobile browsers only<br>
-    Opening this page requires a supported mobile device.
-  </footer>
-</main>
-
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#050907">
+<title>TXG | Device Verification</title>
+<style>
+:root{--bg:#050907;--panel:#090f0e;--border:#17271f;--green:#00f078;--gold:#d8b45a;--muted:#85968b;--text:#edf8f0}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 60% 40%,#00351c35,transparent 50%),var(--bg);color:var(--text);font-family:Inter,system-ui,Arial,sans-serif}.layout{min-height:100vh;display:grid;grid-template-columns:260px minmax(0,1fr);gap:10px;padding:10px}.sidebar,.main{border:1px solid var(--border);border-radius:24px;background:linear-gradient(160deg,#0b1210,#060a09)}.sidebar{padding:24px 18px;display:flex;flex-direction:column;align-items:center}.brand{align-self:flex-start;display:flex;align-items:center;gap:9px;color:var(--green);font-size:25px;font-weight:900;letter-spacing:1px}.profile{width:100%;margin-top:40px;text-align:center}.avatar{width:105px;height:105px;margin:auto;display:grid;place-items:center;border:2px solid #00a94e;border-radius:50%;background:radial-gradient(circle,#28372e,#111714);box-shadow:0 0 24px #00ef7022}.avatar svg{width:65px;height:65px}.username{margin-top:16px;font-size:20px;font-weight:700}.handle{margin-top:7px;color:var(--muted);font-size:13px;overflow-wrap:anywhere}.user-id{display:inline-block;margin-top:12px;padding:8px 11px;border-radius:9px;background:#141d18;color:#a9b9ae;font-size:12px}.separator{width:100%;height:1px;margin:25px 0;background:var(--border)}.sidebar-bottom{margin-top:auto;text-align:center}.gold-link{display:inline-flex;flex-direction:column;align-items:center;padding:12px 22px;border:1px solid transparent;border-radius:17px;color:var(--gold);transition:.2s}.gold-link:hover,.gold-link:focus-visible{border-color:#d8b45a55;background:#d8b45a0c;transform:translateY(-2px);outline:none}.gold-crown{font-size:42px;line-height:1.1}.gold-word{font-size:29px;font-weight:950;letter-spacing:2px}.maker-label{margin-top:8px;color:#8b8061;font-size:11px}.main{min-width:0;padding:23px;display:flex;flex-direction:column}.topbar{display:flex;justify-content:space-between;align-items:center;gap:12px}.topbar-brand{margin:auto;text-align:center;transform:translateX(45px)}.top-crown{color:var(--green);font-size:32px;line-height:1}.top-word{color:var(--green);font-size:29px;font-weight:950;letter-spacing:2px;text-shadow:0 0 18px #00f07830}.secure-badge{padding:11px 13px;border:1px solid var(--border);border-radius:13px;color:#b9c9be;font-size:12px;white-space:nowrap}.secure-badge span{color:var(--green)}.hero{flex:1;min-height:520px;margin-top:12px;border:1px solid #111e17;border-radius:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;position:relative;background:radial-gradient(ellipse at center,#00341a2e,transparent 58%),#05090799}.scanner{width:min(68vw,330px);aspect-ratio:1;display:grid;place-items:center;position:relative;border:2px solid #00d96965;border-radius:50%;box-shadow:0 0 0 13px #00e56b09,0 0 0 26px #00e56b08,inset 0 0 35px #00e56b0b;animation:breathe 3s ease-in-out infinite}.scanner:before{content:"";position:absolute;inset:-24px;border:2px dashed #00bd5e35;border-radius:50%;animation:rotate 24s linear infinite}.scanner:after{content:"";position:absolute;width:100%;height:2px;background:linear-gradient(90deg,transparent,#00f078,transparent);box-shadow:0 0 15px #00f078;animation:scan 3.5s ease-in-out infinite}.shield{width:120px;height:140px;z-index:1;filter:drop-shadow(0 0 17px #00f0783b)}.hero-status{width:min(440px,90%);margin-top:60px;text-align:center}.status-title{color:var(--green);font-size:19px;font-weight:800}.status-message{margin-top:10px;color:var(--muted);font-size:13px;line-height:1.7;overflow-wrap:anywhere}.action{width:100%;margin-top:18px;padding:14px;border:1px solid #00e56b65;border-radius:12px;background:linear-gradient(100deg,#008b44,#00b958);color:white;font-size:14px;font-weight:800;cursor:pointer}.action:disabled{opacity:.55;cursor:not-allowed}.hidden{display:none!important}.footer{margin-top:16px;color:#64746a;text-align:center;font-size:11px}@keyframes rotate{to{transform:rotate(360deg)}}@keyframes scan{0%,100%{transform:translateY(-90px);opacity:.35}50%{transform:translateY(90px);opacity:1}}@keyframes breathe{0%,100%{box-shadow:0 0 0 13px #00e56b09,0 0 0 26px #00e56b08,inset 0 0 35px #00e56b0b}50%{box-shadow:0 0 0 13px #00e56b12,0 0 0 26px #00e56b0b,inset 0 0 45px #00e56b15}}@media(max-width:760px){.layout{grid-template-columns:1fr;padding:7px}.sidebar{padding:14px;border-radius:18px}.brand{font-size:20px}.profile{margin-top:15px}.avatar{width:72px;height:72px}.avatar svg{width:45px;height:45px}.username{margin-top:8px;font-size:17px}.handle{margin-top:4px}.user-id{margin-top:7px;padding:6px 10px}.separator{margin:13px 0 0}.sidebar-bottom{padding-top:6px}.gold-link{padding:4px 12px}.gold-crown{font-size:27px}.gold-word{font-size:21px}.maker-label{display:none}.main{padding:12px;border-radius:18px}.topbar{min-height:50px}.topbar-brand{transform:none}.top-crown{font-size:25px}.top-word{font-size:22px}.secure-badge{padding:8px;font-size:10px}.hero{min-height:450px;padding:24px 12px}.scanner{width:min(62vw,285px)}.shield{width:92px;height:108px}.hero-status{margin-top:50px}}@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important}}
+</style></head><body><div class="layout"><aside class="sidebar"><div class="brand">⬡ TXG</div><div class="profile"><div class="avatar"><svg viewBox="0 0 80 80" fill="none"><circle cx="40" cy="24" r="17" fill="#d0d5d2"/><path d="M12 76c1-19 11-29 28-29s27 10 28 29" fill="#d0d5d2"/><path d="M24 21c0-14 9-20 18-18 12 2 17 11 15 22l-5-6-4-8-16 3-4 9Z" fill="#252a27"/></svg></div><div class="username" id="profileName">TXG User</div><div class="handle" id="profileHandle">Telegram verification</div><div class="user-id" id="profileId">ID: private</div></div><div class="separator"></div><div class="sidebar-bottom"><a class="gold-link" href="https://t.me/TXG_MAKER_bot" target="_blank" rel="noopener noreferrer" aria-label="Open TXG Maker Bot"><span class="gold-crown">♛</span><span class="gold-word">TXG</span><span class="maker-label">OPEN TXG MAKER</span></a></div></aside><main class="main"><header class="topbar"><div class="topbar-brand"><div class="top-crown">♛</div><div class="top-word">TXG</div></div><div class="secure-badge"><span>⬡</span> Secure &amp; Automatic</div></header><section class="hero"><div class="scanner"><svg class="shield" viewBox="0 0 120 140" fill="none"><path d="M60 7 103 24v35c0 31-18 52-43 68C35 111 17 90 17 59V24L60 7Z" stroke="#00e875" stroke-width="7" stroke-linejoin="round"/><path d="m38 66 15 15 31-34" stroke="#00f078" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="hero-status"><div class="status-title" id="statusTitle">TXG SECURITY</div><div class="status-message" id="statusMessage">Checking registration information...</div><button class="action hidden" id="verifyButton">Verify Device</button><button class="action hidden" id="retryButton">Try Again</button></div></section><footer class="footer">TXG SECURITY SYSTEM · ACCESS CONTROLLED</footer></main></div>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script>
 (() => {
-  "use strict";
-
-  const tg = window.Telegram?.WebApp;
   const $ = id => document.getElementById(id);
   const params = new URLSearchParams(location.search);
-  const bot = params.get("bot") || "";
-
-  let running = false;
-
-  function progress(n, label) {
-    $("fill").style.width = n + "%";
-    $("percent").textContent = n + "%";
-    $("progressText").textContent = label;
+  const registrationId = params.get('registration_id');
+  history.replaceState(null, '', location.pathname);
+  const tg = window.Telegram?.WebApp;
+  if (tg) tg.ready();
+  function show(title, message, action = '') {
+    $('statusTitle').textContent = title;
+    $('statusMessage').textContent = message;
+    $('verifyButton').classList.toggle('hidden', action !== 'verify');
+    $('retryButton').classList.toggle('hidden', action !== 'retry');
   }
-
-  function notice(message, type) {
-    $("notice").textContent = message;
-    $("notice").className = "notice show " + (type || "");
-  }
-
-  function result(type, symbol, title, desc, percent, label) {
-    $("card").classList.remove("success", "failure");
-    if (type === "success") $("card").classList.add("success");
-    if (type === "failure") $("card").classList.add("failure");
-
-    $("symbol").textContent = symbol;
-    $("heading").textContent = title;
-    $("description").textContent = desc;
-    progress(percent, label);
-  }
-
-  function showProfile(user) {
-    if (!user) return;
-    const fullName = [user.first_name, user.last_name]
-      .filter(Boolean).join(" ") || "Telegram User";
-
-    $("name").textContent = fullName;
-    $("username").textContent = user.username
-      ? "@" + user.username : "Telegram account";
-    $("telegramId").textContent = "Telegram ID: " + user.id;
-    $("avatar").textContent = fullName[0].toUpperCase();
-  }
-
-  function mobilePlatform() {
-    const ua = navigator.userAgent || "";
-
-    if (/Windows NT|Macintosh|X11|Linux x86_64|CrOS/i.test(ua)) {
-      return null;
+  function getDeviceId() {
+    // This identifies this browser installation, not a guaranteed permanent physical device ID.
+    let id = localStorage.getItem('txg_installation_id');
+    if (!id) {
+      id = crypto.randomUUID ? crypto.randomUUID() + crypto.randomUUID() : Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2,'0')).join('');
+      localStorage.setItem('txg_installation_id', id);
     }
-
-    if (/Android/i.test(ua)) return "android";
-    if (/iPhone|iPad|iPod/i.test(ua)) return "ios";
-    return null;
+    return id;
   }
-
-  function deviceId() {
-    const key = "txg_browser_installation_v1";
-
-    try {
-      let id = localStorage.getItem(key);
-
-      if (!id || !/^[a-f0-9-]{36}$/i.test(id)) {
-        id = crypto.randomUUID();
-        localStorage.setItem(key, id);
-      }
-
-      return id;
-    } catch {
-      throw new Error("Browser storage unavailable. Enable site storage and retry.");
-    }
-  }
-
-  async function post(url, payload) {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "same-origin",
-      cache: "no-store",
-      body: JSON.stringify(payload)
-    });
-
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok || !data.ok) {
-      const e = new Error(data.error || "Verification request failed.");
-      e.status = response.status;
-      e.resultStatus = data.status;
-      throw e;
-    }
-
-    return data;
-  }
-
   async function verify() {
-    if (running) return;
-    running = true;
-    $("verifyButton").disabled = true;
-    $("notice").className = "notice";
-
+    $('verifyButton').disabled = true;
+    show('VERIFYING DEVICE', 'Checking Telegram identity and registration...');
     try {
-      const platform = mobilePlatform();
-
-      if (!platform) {
-        result("failure", "!", "Device Not Supported",
-          "TXG verification is available on supported Android and iPhone browsers only. Computers and unsupported devices are blocked.",
-          0, "Unsupported device");
-        notice("Open this page on an Android phone or iPhone.", "error");
+      const response = await fetch('/api/verify', {
+        method: 'POST', headers: {'Content-Type':'application/json'}, cache: 'no-store',
+        body: JSON.stringify({ registration_id: registrationId, init_data: tg?.initData || '', device_id: getDeviceId() })
+      });
+      const data = await response.json();
+      if (!response.ok || data.status !== 'success') {
+        show(data.title || 'VERIFICATION REJECTED', data.message || 'Verification could not be completed.', 'retry');
         return;
       }
-
-      if (!tg?.initData) {
-        result("failure", "!", "Telegram Login Required",
-          "This browser does not have Telegram Mini App authentication data. The external-browser login flow must be implemented on the server before Chrome or Safari can verify automatically.",
-          0, "Authentication required");
-        notice("Open this page from the Telegram Mini App, or use the external-browser login flow when enabled.", "error");
-        return;
-      }
-
-      if (!/^[A-Za-z0-9_]{3,64}$/.test(bot)) {
-        throw new Error("Bot key is missing or invalid in the page URL.");
-      }
-
-      const id = deviceId();
-
-      result("", "◇", "Checking Telegram Session",
-        "Validating your Telegram authentication with the server.",
-        20, "Authentication");
-
-      const session = await post("/api/session", {
-        bot,
-        initData: tg.initData
-      });
-
-      showProfile({
-        id: session.user.id,
-        username: session.user.username,
-        first_name: session.user.firstName
-      });
-
-      progress(55, "Checking existing registration");
-
-      const verified = await post("/api/verify", {
-        bot,
-        initData: tg.initData,
-        deviceId: id
-      });
-
-      result("success", "✓", "Verification Successful",
-        "Your Telegram account has been verified for this bot.",
-        100, "Complete");
-
-      $("profileStatus").textContent = "Verified";
-      $("verifyButton").hidden = true;
-      notice(verified.message || "Verification successful.", "success");
-
-      if (tg.HapticFeedback?.notificationOccurred) {
-        tg.HapticFeedback.notificationOccurred("success");
-      }
-    } catch (e) {
-      result("failure", "!", "Verification Failed",
-        "Verification could not be completed. Check your connection and try again.",
-        0, "Failed");
-      notice(e.message, "error");
-      $("profileStatus").textContent = "Failed";
-    } finally {
-      running = false;
-      $("verifyButton").disabled = false;
-    }
+      $('profileName').textContent = tg?.initDataUnsafe?.user?.first_name || 'Verified User';
+      $('profileHandle').textContent = data.bot_username ? '@' + data.bot_username : 'Telegram account verified';
+      $('profileId').textContent = 'Verified';
+      show('✓ SUCCESS', data.message || 'Device verification completed.');
+    } catch {
+      show('CONNECTION ERROR', 'Could not contact the verification server. Please try again.', 'retry');
+    } finally { $('verifyButton').disabled = false; }
   }
-
-  function init() {
-    if (tg) {
-      tg.ready();
-      tg.expand();
-      showProfile(tg.initDataUnsafe?.user);
-    }
-
-    $("botTitle").textContent = bot || "TXG Verification";
-    document.title = (bot || "TXG") + " | Verification";
-    $("verifyButton").addEventListener("click", verify);
+  async function start() {
+    if (!registrationId) { show('REGISTRATION REQUIRED', 'Open this website using a fresh registration link from your bot.'); return; }
+    try {
+      const response = await fetch('/api/registration-info', { method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store', body:JSON.stringify({registration_id:registrationId}) });
+      const data = await response.json();
+      if (!response.ok || data.status !== 'success') { show('REGISTRATION REJECTED', data.message || 'The ID is invalid, expired, or already used.'); return; }
+      $('profileHandle').textContent = '@' + data.bot_username;
+      $('profileId').textContent = 'Bot: @' + data.bot_username;
+      // The info endpoint consumes the ID; verification therefore uses a separate flow/token in a production deployment.
+      show('BOT REGISTERED', 'Bot details loaded. Continue inside the official Telegram Mini App to verify your account.', 'verify');
+    } catch { show('CONNECTION ERROR', 'Could not contact the server.', 'retry'); }
   }
-
-  init();
+  $('verifyButton').addEventListener('click', verify);
+  $('retryButton').addEventListener('click', start);
+  start();
 })();
 </script>
-</body>
-</html>
+</body></html>

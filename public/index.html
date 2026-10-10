@@ -140,12 +140,10 @@ button,a{-webkit-tap-highlight-color:transparent}
   0%,100%{box-shadow:0 0 0 13px #00e56b09,0 0 0 26px #00e56b08,inset 0 0 35px #00e56b0b}
   50%{box-shadow:0 0 0 13px #00e56b12,0 0 0 26px #00e56b0b,inset 0 0 45px #00e56b15}
 }
-
-/* MOBILE */
 @media(max-width:600px){
   .layout{
     display:flex;flex-direction:column;gap:9px;
-    padding: max(7px,env(safe-area-inset-top)) 8px max(9px,env(safe-area-inset-bottom));
+    padding:max(7px,env(safe-area-inset-top)) 8px max(9px,env(safe-area-inset-bottom));
     min-height:100vh;min-height:100dvh;
   }
   .sidebar{
@@ -169,17 +167,13 @@ button,a{-webkit-tap-highlight-color:transparent}
   .gold-crown{font-size:25px}
   .gold-word{font-size:15px;letter-spacing:1px}
   .maker-label{display:none}
-
   .main{padding:10px;border-radius:17px;flex:1}
   .topbar{min-height:45px;gap:7px}
   .topbar-brand{margin:0 auto}
   .top-crown{font-size:21px}
   .top-word{font-size:19px;letter-spacing:1.5px}
   .secure-badge{max-width:125px;padding:7px 8px;font-size:9px;line-height:1.4}
-  .hero{
-    flex:1;min-height:0;margin-top:9px;padding:32px 12px 26px;
-    border-radius:15px;
-  }
+  .hero{flex:1;min-height:0;margin-top:9px;padding:32px 12px 26px;border-radius:15px}
   .scanner{width:min(58vw,225px)}
   .shield{width:77px;height:92px}
   .hero-status{margin-top:36px}
@@ -299,6 +293,9 @@ button,a{-webkit-tap-highlight-color:transparent}
     } catch (_) {}
   }
 
+  // Preserve the bot username separately from the Telegram user's profile.
+  let registeredBotUsername = "";
+
   function show(title, message, action = "") {
     $("statusTitle").textContent = title;
     $("statusMessage").textContent = message;
@@ -327,8 +324,9 @@ button,a{-webkit-tap-highlight-color:transparent}
 
       return id;
     } catch (_) {
-      // If storage is blocked, do not silently generate a new ID on every click.
-      throw new Error("Device storage is unavailable. Open this page in Telegram and try again.");
+      throw new Error(
+        "Device storage is unavailable. Open this page in Telegram and try again."
+      );
     }
   }
 
@@ -354,16 +352,23 @@ button,a{-webkit-tap-highlight-color:transparent}
 
   function showTelegramProfile() {
     const user = tg?.initDataUnsafe?.user;
-    if (!user) return;
 
-    $("profileName").textContent =
-      [user.first_name, user.last_name].filter(Boolean).join(" ") || "Telegram User";
+    if (user) {
+      $("profileName").textContent =
+        [user.first_name, user.last_name].filter(Boolean).join(" ") ||
+        "Telegram User";
 
-    $("profileHandle").textContent =
-      user.username ? "@" + user.username : "Telegram verification";
+      $("profileId").textContent = "Telegram account";
+    }
 
-    // Do not expose the user's Telegram ID on the page.
-    $("profileId").textContent = "Telegram account";
+    // Never let the Telegram profile overwrite the registered bot handle.
+    if (registeredBotUsername) {
+      $("profileHandle").textContent = "@" + registeredBotUsername;
+    } else if (user?.username) {
+      $("profileHandle").textContent = "@" + user.username;
+    } else {
+      $("profileHandle").textContent = "Telegram verification";
+    }
   }
 
   async function start() {
@@ -376,6 +381,8 @@ button,a{-webkit-tap-highlight-color:transparent}
     }
 
     $("retryButton").disabled = true;
+    $("verifyButton").disabled = true;
+
     show("CHECKING REGISTRATION", "Loading secure bot information...");
 
     try {
@@ -392,16 +399,12 @@ button,a{-webkit-tap-highlight-color:transparent}
         return;
       }
 
-      if (data.bot_username) {
-        $("profileHandle").textContent = "@" + data.bot_username;
-        $("profileId").textContent = "Registered bot";
-      }
-
+      registeredBotUsername = data.bot_username || "";
       showTelegramProfile();
 
       show(
         "READY TO VERIFY",
-        "Bot @" + (data.bot_username || "unknown") +
+        "Bot @" + (registeredBotUsername || "unknown") +
         " is registered. Continue inside the official Telegram Mini App.",
         "verify"
       );
@@ -418,7 +421,10 @@ button,a{-webkit-tap-highlight-color:transparent}
 
   async function verify() {
     if (!registrationId) {
-      show("REGISTRATION REQUIRED", "Open a fresh registration link from your bot.");
+      show(
+        "REGISTRATION REQUIRED",
+        "Open a fresh registration link from your bot."
+      );
       return;
     }
 
@@ -432,7 +438,11 @@ button,a{-webkit-tap-highlight-color:transparent}
 
     $("verifyButton").disabled = true;
     $("retryButton").classList.add("hidden");
-    show("VERIFYING DEVICE", "Checking Telegram identity, device and connection...");
+
+    show(
+      "VERIFYING DEVICE",
+      "Checking Telegram identity, device and connection..."
+    );
 
     try {
       const deviceId = getDeviceId();
@@ -445,21 +455,27 @@ button,a{-webkit-tap-highlight-color:transparent}
 
       if (data.status === "success" && response.ok) {
         showTelegramProfile();
-
-        if (data.bot_username) {
-          $("profileHandle").textContent = "@" + data.bot_username;
-        }
-
         $("profileId").textContent = "Verified";
-        show("✓ VERIFICATION SUCCESSFUL", data.message || "Your device has been verified.");
+
+        show(
+          "✓ VERIFICATION SUCCESSFUL",
+          data.message || "Your device has been verified."
+        );
         return;
       }
 
-      if (data.status === "info" &&
-          /already verified/i.test(data.title || "")) {
+      if (
+        data.status === "info" &&
+        /already verified/i.test(data.title || "")
+      ) {
         showTelegramProfile();
         $("profileId").textContent = "Verified";
-        show("✓ ALREADY VERIFIED", data.message || "This account is already verified on this device.");
+
+        show(
+          "✓ ALREADY VERIFIED",
+          data.message ||
+          "This account is already verified on this device."
+        );
         return;
       }
 

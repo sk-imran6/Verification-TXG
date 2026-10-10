@@ -65,7 +65,9 @@ function encrypt(text) {
 
 function decrypt(value) {
   const parts = value.split(".");
-  if (parts.length !== 3) throw new Error("Invalid encrypted token");
+  if (parts.length !== 3) {
+    throw new Error("Invalid encrypted token");
+  }
 
   const [iv, tag, data] = parts;
   const decipher = crypto.createDecipheriv(
@@ -90,7 +92,10 @@ function requireTbc(req, res, next) {
     supplied.length !== expected.length ||
     !crypto.timingSafeEqual(supplied, expected)
   ) {
-    return reply(res, 401, "error", "Unauthorized", "TBC authentication failed.");
+    return reply(
+      res, 401, "error", "Unauthorized",
+      "TBC authentication failed."
+    );
   }
 
   next();
@@ -162,11 +167,11 @@ function telegramInitDataValid(initData, token) {
    TBC WEBHOOK CALLBACK
 --------------------------------- */
 
-// Configure this to the exact trusted TBC webhook hostname
-// once you confirm the hostname returned by libs.Webhook.getUrlFor().
 function validateTbcWebhook(value) {
   try {
-    if (typeof value !== "string" || value.length > 2000) return false;
+    if (typeof value !== "string" || value.length > 2000) {
+      return false;
+    }
 
     const url = new URL(value);
 
@@ -183,11 +188,12 @@ function validateTbcWebhook(value) {
       return false;
     }
 
-    // Optional strict allowlist:
-    // Set TBC_WEBHOOK_HOST to the exact trusted hostname in Render.
     const allowedHost = process.env.TBC_WEBHOOK_HOST;
 
-    if (allowedHost && url.hostname.toLowerCase() !== allowedHost.toLowerCase()) {
+    if (
+      allowedHost &&
+      url.hostname.toLowerCase() !== allowedHost.toLowerCase()
+    ) {
       return false;
     }
 
@@ -199,7 +205,7 @@ function validateTbcWebhook(value) {
 
 async function sendTbcCallback(webhookUrl, payload) {
   if (!validateTbcWebhook(webhookUrl)) {
-    console.error("TBC callback skipped: invalid/untrusted webhook URL");
+    console.error("TBC callback skipped: invalid webhook URL");
     return false;
   }
 
@@ -234,7 +240,9 @@ async function sendTbcCallback(webhookUrl, payload) {
 function getClientIp(req) {
   let ip = req.ip || "";
 
-  if (ip.startsWith("::ffff:")) ip = ip.slice(7);
+  if (ip.startsWith("::ffff:")) {
+    ip = ip.slice(7);
+  }
 
   return ip;
 }
@@ -260,17 +268,24 @@ function extractIpDbFlags(data) {
 }
 
 async function queryIpDb(ip) {
-  if (!IPDB_KEY) throw new Error("IPDB_KEY is not configured");
+  if (!IPDB_KEY) {
+    throw new Error("IPDB_KEY is not configured");
+  }
 
   const response = await fetch(
     "https://ip-db.com/api/v1/check/" + encodeURIComponent(ip),
     {
-      headers: { Key: IPDB_KEY, Accept: "application/json" },
+      headers: {
+        Key: IPDB_KEY,
+        Accept: "application/json"
+      },
       signal: AbortSignal.timeout(5000)
     }
   );
 
-  if (!response.ok) throw new Error(`IP-DB HTTP ${response.status}`);
+  if (!response.ok) {
+    throw new Error(`IP-DB HTTP ${response.status}`);
+  }
 
   const data = await response.json();
 
@@ -282,7 +297,9 @@ async function queryIpDb(ip) {
 }
 
 async function queryIpApi(ip) {
-  if (!IPAPI_KEY) throw new Error("IPAPI_KEY is not configured");
+  if (!IPAPI_KEY) {
+    throw new Error("IPAPI_KEY is not configured");
+  }
 
   const response = await fetch("https://api.ipapi.is", {
     method: "POST",
@@ -294,7 +311,9 @@ async function queryIpApi(ip) {
     signal: AbortSignal.timeout(5000)
   });
 
-  if (!response.ok) throw new Error(`ipapi.is HTTP ${response.status}`);
+  if (!response.ok) {
+    throw new Error(`ipapi.is HTTP ${response.status}`);
+  }
 
   const data = await response.json();
 
@@ -385,11 +404,14 @@ async function checkIpRisk(ip) {
 --------------------------------- */
 
 app.get("/health", (req, res) => {
-  return reply(res, 200, "success", "Online", "TXG backend running");
+  return reply(
+    res, 200, "success", "Online",
+    "TXG backend running"
+  );
 });
 
 /* --------------------------------
-   REGISTER BOT + USER CALLBACK
+   REGISTER BOT
 --------------------------------- */
 
 app.post("/api/register", requireTbc, async (req, res) => {
@@ -402,7 +424,10 @@ app.post("/api/register", requireTbc, async (req, res) => {
       typeof token !== "string" ||
       !/^\d{5,20}:[A-Za-z0-9_-]{20,}$/.test(token)
     ) {
-      return reply(res, 400, "error", "Invalid token", "Provide a valid bot token.");
+      return reply(
+        res, 400, "error", "Invalid token",
+        "Provide a valid bot token."
+      );
     }
 
     if (!validateTbcWebhook(webhookUrl)) {
@@ -413,7 +438,10 @@ app.post("/api/register", requireTbc, async (req, res) => {
     }
 
     if (!/^\d{1,20}$/.test(tbcUserId)) {
-      return reply(res, 400, "error", "Invalid user", "Valid TBC user ID required.");
+      return reply(
+        res, 400, "error", "Invalid user",
+        "Valid TBC user ID required."
+      );
     }
 
     const tgResponse = await fetch(
@@ -433,8 +461,12 @@ app.post("/api/register", requireTbc, async (req, res) => {
     const botKey = sha(token);
 
     await sql`
-      INSERT INTO registered_bots (bot_key, bot_username, bot_token_enc)
-      VALUES (${botKey}, ${tg.result.username}, ${encrypt(token)})
+      INSERT INTO registered_bots (
+        bot_key, bot_username, bot_token_enc
+      )
+      VALUES (
+        ${botKey}, ${tg.result.username}, ${encrypt(token)}
+      )
       ON CONFLICT (bot_key)
       DO UPDATE SET
         bot_username = EXCLUDED.bot_username,
@@ -442,14 +474,17 @@ app.post("/api/register", requireTbc, async (req, res) => {
     `;
 
     const id = randomId();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    const expiresAt = new Date(
+      Date.now() + 5 * 60 * 1000
+    ).toISOString();
 
     await sql`
       INSERT INTO temporary_registration_ids (
         id_hash, bot_key, expires_at, webhook_url, tbc_user_id
       )
       VALUES (
-        ${sha(id)}, ${botKey}, ${expiresAt}, ${webhookUrl}, ${tbcUserId}
+        ${sha(id)}, ${botKey}, ${expiresAt},
+        ${webhookUrl}, ${tbcUserId}
       )
     `;
 
@@ -460,13 +495,17 @@ app.post("/api/register", requireTbc, async (req, res) => {
         registration_id: id,
         expires_at: expiresAt,
         bot_username: tg.result.username,
-        webapp_url: `${ORIGIN}/?registration_id=${encodeURIComponent(id)}`
+        webapp_url:
+          `${ORIGIN}/?registration_id=${encodeURIComponent(id)}`
       }
     );
   } catch (error) {
     console.error("register:", error.message);
 
-    return reply(res, 500, "error", "Server error", "Could not register bot.");
+    return reply(
+      res, 500, "error", "Server error",
+      "Could not register bot."
+    );
   }
 });
 
@@ -478,8 +517,15 @@ app.post("/api/registration-info", async (req, res) => {
   try {
     const id = req.body?.registration_id;
 
-    if (typeof id !== "string" || id.length < 30 || id.length > 100) {
-      return reply(res, 400, "error", "Invalid ID", "Registration ID is invalid.");
+    if (
+      typeof id !== "string" ||
+      id.length < 30 ||
+      id.length > 100
+    ) {
+      return reply(
+        res, 400, "error", "Invalid ID",
+        "Registration ID is invalid."
+      );
     }
 
     const rows = await sql`
@@ -506,7 +552,10 @@ app.post("/api/registration-info", async (req, res) => {
     `;
 
     if (!bots.length) {
-      return reply(res, 404, "error", "Bot not found", "Registered bot not found.");
+      return reply(
+        res, 404, "error", "Bot not found",
+        "Registered bot not found."
+      );
     }
 
     return reply(
@@ -517,7 +566,10 @@ app.post("/api/registration-info", async (req, res) => {
   } catch (error) {
     console.error("registration-info:", error.message);
 
-    return reply(res, 500, "error", "Server error", "Could not load registration.");
+    return reply(
+      res, 500, "error", "Server error",
+      "Could not load registration."
+    );
   }
 });
 
@@ -532,10 +584,14 @@ app.post("/api/verify", async (req, res) => {
     const deviceId = req.body?.device_id;
 
     if (
-      typeof id !== "string" || id.length < 30 || id.length > 100 ||
-      typeof initData !== "string" || initData.length > 10000 ||
+      typeof id !== "string" ||
+      id.length < 30 ||
+      id.length > 100 ||
+      typeof initData !== "string" ||
+      initData.length > 10000 ||
       typeof deviceId !== "string" ||
-      deviceId.length < 16 || deviceId.length > 200
+      deviceId.length < 16 ||
+      deviceId.length > 200
     ) {
       return reply(
         res, 400, "error", "Missing data",
@@ -555,7 +611,10 @@ app.post("/api/verify", async (req, res) => {
     const ip = getClientIp(req);
 
     if (!ip || net.isIP(ip) === 0) {
-      return reply(res, 400, "error", "IP unavailable", "Could not determine connection IP.");
+      return reply(
+        res, 400, "error", "IP unavailable",
+        "Could not determine connection IP."
+      );
     }
 
     const risk = await checkIpRisk(ip);
@@ -601,15 +660,23 @@ app.post("/api/verify", async (req, res) => {
     `;
 
     if (!botRows.length) {
-      return reply(res, 404, "error", "Bot not found", "Please register this bot again.");
+      return reply(
+        res, 404, "error", "Bot not found",
+        "Please register this bot again."
+      );
     }
 
     const bot = botRows[0];
-    const user = telegramInitDataValid(initData, decrypt(bot.bot_token_enc));
+    const user = telegramInitDataValid(
+      initData,
+      decrypt(bot.bot_token_enc)
+    );
 
     if (!user || !user.id) {
       await sql`
-        INSERT INTO verification_events (bot_key, event_type, details)
+        INSERT INTO verification_events (
+          bot_key, event_type, details
+        )
         VALUES (
           ${botKey},
           'rejected_invalid_telegram_auth',
@@ -658,7 +725,8 @@ app.post("/api/verify", async (req, res) => {
         await sql`
           UPDATE temporary_registration_ids
           SET used_at = NOW()
-          WHERE id_hash = ${sha(id)} AND used_at IS NULL
+          WHERE id_hash = ${sha(id)}
+            AND used_at IS NULL
         `;
 
         await sendTbcCallback(webhookUrl, {
@@ -704,7 +772,6 @@ app.post("/api/verify", async (req, res) => {
       );
     }
 
-    // Unique database constraints remain the final duplicate safeguard.
     await sql`
       INSERT INTO device_registrations (
         bot_key, telegram_user_id, device_hash,
@@ -720,7 +787,8 @@ app.post("/api/verify", async (req, res) => {
     await sql`
       UPDATE temporary_registration_ids
       SET used_at = NOW()
-      WHERE id_hash = ${sha(id)} AND used_at IS NULL
+      WHERE id_hash = ${sha(id)}
+        AND used_at IS NULL
     `;
 
     await sql`
@@ -729,11 +797,13 @@ app.post("/api/verify", async (req, res) => {
       )
       VALUES (
         ${botKey}, ${telegramId}, 'verified',
-        ${JSON.stringify({ platform, risk_source: risk.source })}::jsonb
+        ${JSON.stringify({
+          platform,
+          risk_source: risk.source
+        })}::jsonb
       )
     `;
 
-    // Callback is best-effort; the database verification is already saved.
     await sendTbcCallback(webhookUrl, {
       status: "success",
       title: "Device Verified",
@@ -775,11 +845,14 @@ app.use(express.static(
 ));
 
 app.use((req, res) => {
-  return reply(res, 404, "error", "Not found", "Endpoint not found.");
+  return reply(
+    res, 404, "error", "Not found",
+    "Endpoint not found."
+  );
 });
 
-const port = Number(process.env.PORT || 3000);
+/* --------------------------------
+   VERCEL EXPORT
+--------------------------------- */
 
-app.listen(port, () => {
-  console.log(`TXG verification server listening on ${port}`);
-});
+module.exports = app;

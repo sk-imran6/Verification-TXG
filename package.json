@@ -1,0 +1,9 @@
+{
+  "name": "txg-device-verification",
+  "version": "2.0.0",
+  "private": true,
+  "description": "TXG Telegram device verification service",
+  "scripts": {"start": "node server.js"},
+  "engines": {"node": ">=20"},
+  "dependencies": {"@neondatabase/serverless": "^1.0.1", "express": "^5.1.0"}
+}
